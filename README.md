@@ -8,7 +8,7 @@ not duplicate work even if called from seperate processes.
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
+[available in Hex](https://hex.pm/docs/publish), the package can be installed
 by adding `thunk` to your list of dependencies in `mix.exs`:
 
 ```elixir
