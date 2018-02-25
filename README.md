@@ -1,6 +1,10 @@
 # Thunk
 
-**TODO: Add description**
+Laziness in Elixir. This package provides a way to do laziness in Elxir by 
+providing a way to create thunks. Thunks are deferred computations that do not
+preform any work until forced. Once forced any processes that have the
+thunk get the value for free, i.e. multiple calls to the force function will
+not duplicate work even if called from seperate processes.
 
 ## Installation
 
