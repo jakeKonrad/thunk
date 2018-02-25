@@ -7,7 +7,10 @@ defmodule Thunk.MixProject do
       version: "0.1.0",
       elixir: "~> 1.6",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      package: package(),
+      description: "Laziness in Elixir",
+      source_url: "https://github.com/jakeKonrad/thunk"
     ]
   end
 
@@ -20,6 +23,15 @@ defmodule Thunk.MixProject do
   defp deps do
     [
       {:ex_doc, "~> 0.16", only: :dev, runtime: false}
+    ]
+  end
+
+  defp package do
+    [
+      name: "Thunk",
+      maintainers: ["jakegkonrad@gmail.com"],
+      licences: ["MIT"],
+      links: %{"GitHub" => "https://github.com/jakeKonrad/thunk"}
     ]
   end
 end

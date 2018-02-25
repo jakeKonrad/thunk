@@ -1,8 +1,31 @@
 defmodule Thunk do
   @moduledoc """
-  Laziness in Elixir. Thunks are computations that have not yet happened.
-  This module provides the thunk type and functions for manipulating and
+  Laziness in Elixir. `Thunk`s are computations that have not yet happened.
+  This module provides the `thunk` type and functions for manipulating and
   creating thunks.
+
+  `Thunk`s allow for setting up a computation and transforming it without evaluating it.
+  A `thunk` can be shared amongst many processes and if one process forces the value of 
+  it all the other processes get the work for free.
+
+  ## Example
+
+      defmodule LazyList do
+        import Thunk  
+
+        @doc \"\"\"
+        An infinite list that just repeats its argument.
+        
+        ## Example
+        
+            iex> repeat(1)
+            [1 | ...]
+
+        \"\"\"
+        def repeat(x) do
+          [x | suspend(repeat(x))]
+        end
+      end
   """
 
   # Contains the pid of the thunk process.
@@ -10,8 +33,8 @@ defmodule Thunk do
   @enforce_keys [:pid]
   defstruct [:pid]
 
-  @typedoc "A thunk. Thunks represent a computation yet to happen."
-  @opaque t :: %__MODULE__{pid: pid}
+  @typedoc "A `thunk`. `Thunk`s represent a computation yet to happen."
+  @opaque t :: %Thunk{pid: pid}
 
   # The thunk process, responsible for maintaining 
   # state of the thunk. Provides two "methods", get and force.
@@ -41,10 +64,10 @@ defmodule Thunk do
   # Helper functions to create thunks.
   @doc false
   def to_thunk(x) do
-    %__MODULE__{pid: spawn_link(fn -> thunk(x) end)}
+    %Thunk{pid: spawn_link(fn -> thunk(x) end)}
   end
 
-  @doc "Suspends a value in a thunk."
+  @doc "Suspends a value in a `thunk`."
   @spec suspend(term) :: t
   defmacro suspend(x) do
     quote do
@@ -54,8 +77,8 @@ defmodule Thunk do
   end
 
   @doc """
-  Given a thunk and a function returns a new thunk where the value in
-  the thunk has had the function applied to it without forcing the evaluation.
+  Given a `thunk` and a function returns a new `thunk` where the value in
+  the `thunk` has had the function applied to it without forcing the evaluation.
   """
   @spec map(t, (term -> any)) :: t
   def map(thunk, f) do
@@ -72,7 +95,7 @@ defmodule Thunk do
     end
   end
 
-  @doc "Forces the evaluation of the thunk and returns the value contained"
+  @doc "Forces the evaluation of the `thunk` and returns the value contained"
   @spec force(t) :: term
   def force(thunk) do
     me = self()
