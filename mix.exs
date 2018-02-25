@@ -28,9 +28,9 @@ defmodule Thunk.MixProject do
 
   defp package do
     [
-      name: "Thunk",
+      name: "thunk",
       maintainers: ["jakegkonrad@gmail.com"],
-      licences: ["MIT"],
+      licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/jakeKonrad/thunk"}
     ]
   end
