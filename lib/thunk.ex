@@ -18,8 +18,9 @@ defmodule Thunk do
         ## Example
         
             iex> xs = Infinity.repeatedly(1)
+            #Thunk<...>
             iex> [h | t] = Thunk.force(xs)
-            [1 | ...]
+            [1 | #Thunk<...>]
         \"\"\"
         def repeatedly(x) do
           Thunk.suspend([x | repeatedly(x)])
@@ -107,9 +108,8 @@ defmodule Thunk do
 
   ## Example
 
-      iex> thunk = Thunk.suspend(raise("Oops you evaluated me!"))
-      iex> Thunk.force(thunk)
-      ** (RuntimeError) Oops you evaluated me!
+      iex> Thunk.suspend(raise("Oops you evaluated me!"))
+      #Thunk<...>
   """
   @spec suspend(any) :: thunk
   defmacro suspend(x) do
@@ -251,6 +251,6 @@ defimpl Inspect, for: Thunk do
   import Inspect.Algebra
 
   def inspect(_, _) do
-    string("...")
+    string("#Thunk<...>")
   end
 end
