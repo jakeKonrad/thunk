@@ -243,7 +243,7 @@ defmodule ThunkError do
   end
 
   def exception({:noproc, pid}) do
-    %__MODULE__{message: "Thunk, #{inspect(pid)}, already evaluated."}
+    %__MODULE__{message: "Thunk, #{inspect(pid)}, already evaluated or was deleted."}
   end
 end
 
