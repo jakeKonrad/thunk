@@ -1,10 +1,8 @@
 # Thunk
 
-Laziness in Elixir. This package provides a way to do laziness in Elxir by 
-providing a way to create thunks. Thunks are deferred computations that do not
-preform any work until forced. Once forced any processes that have the
-thunk get the value for free, i.e. multiple calls to the force function will
-not duplicate work even if called from seperate processes.
+This package provides a way to do laziness in Elxir. Contains functions to build
+thunks from elixir terms and combinators for more complex computations. Evaluation
+uses a call-by-need-ish strategy.
 
 ## Installation
 
@@ -14,12 +12,10 @@ by adding `thunk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:thunk, "~> 0.1.0"}
+    {:thunk, "~> 0.2.0"}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/thunk](https://hexdocs.pm/thunk).
+The docs can be found at [https://hexdocs.pm/thunk](https://hexdocs.pm/thunk).
 
