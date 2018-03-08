@@ -1,8 +1,7 @@
 # Thunk
 
 This package provides a way to do laziness in Elxir. Contains functions to build
-thunks from elixir terms and combinators for more complex computations. Evaluation
-uses a call-by-need-ish strategy.
+thunks from elixir terms and combinators for more complex computations.
 
 ## Installation
 
@@ -12,10 +11,9 @@ by adding `thunk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:thunk, "~> 0.2.0"}
+    {:thunk, "~> 0.3.0"}
   ]
 end
 ```
 
 The docs can be found at [https://hexdocs.pm/thunk](https://hexdocs.pm/thunk).
-
