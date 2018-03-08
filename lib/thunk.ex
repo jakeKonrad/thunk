@@ -42,65 +42,77 @@ defmodule Thunk do
   """
   @type element :: any
 
-  @typep state ::
-           {:const, (() -> any)}
-           | {:error, Exception.t(), Exception.stacktrace()}
-           | {:lambda, pid, reference, (any -> any)}
+  # @typep msg ::
+  #         {:forced, reference, any}
+  #         | {:bind, reference, pid}
+  #         | :force
+
+  @typep expr ::
+           {:var, (() -> any)}
+           | {:lambda, reference, pid, (any -> any)}
+           | {:apply, reference, pid, reference, pid}
 
   @doc false
-  @spec thunk(state) :: no_return
-  # Constant
-  def thunk({:const, f}) do
+  @spec thunk(expr, [{:bind, reference, pid}]) :: no_return
+  def thunk(expr = {:var, f}, binds) do
     receive do
-      # To evaluate a constant evaluate and exit
-      # with value.
-      :eval ->
+      bind = {:bind, _, _} ->
+        thunk(expr, [bind | binds])
+
+      :force ->
         x = f.()
-        exit({:evaluated, x})
+        do_thunk(x, binds)
     end
   end
 
-  # Error
-  def thunk({:error, msg, stacktrace}) do
+  def thunk(expr = {:lambda, ref, pid, f}, binds) do
     receive do
-      # To evaluate error reraise the error
-      # that occured.
-      :eval ->
-        reraise(msg, stacktrace)
-    end
-  end
+      bind = {:bind, _, _} ->
+        thunk(expr, [bind | binds])
 
-  # Lambda
-  def thunk({:lambda, pid, ref, f}) do
-    receive do
-      # To evaluate a lambda send argument process :eval,
-      # then apply function and exit.
-      :eval ->
-        send(pid, :eval)
+      :force ->
+        send(pid, :force)
 
-        # Awaits result of argument thunk.
         receive do
-          # Evaluates function with argument.
-          {:DOWN, ^ref, :process, _, {:evaluated, x}} ->
+          {:forced, ^ref, x} ->
             y = f.(x)
-            exit({:evaluated, y})
-
-          # If argument process raises an error,
-          # propagate error.
-          {:DOWN, ^ref, :process, _, {msg, stacktrace}} ->
-            if Exception.exception?(msg) do
-              reraise(msg, stacktrace)
-            end
-
-          # If argument process doesn't exist raise ThunkError.
-          {:DOWN, ^ref, :process, _, :noproc} ->
-            raise(ThunkError, {:noproc, pid})
-
-          # If argument process killed raise ThunkError.
-          {:DOWN, ^ref, :process, _, :killed} ->
-            raise(ThunkError, {:killed, pid})
+            do_thunk(y, binds)
         end
     end
+  end
+
+  def thunk(expr = {:apply, ref_f, pid_f, ref_x, pid_x}, binds) do
+    receive do
+      bind = {:bind, _, _} ->
+        thunk(expr, [bind | binds])
+
+      :force ->
+        send(pid_f, :force)
+        send(pid_x, :force)
+
+        receive do
+          {:forced, ^ref_f, f} ->
+            receive do
+              {:forced, ^ref_x, x} ->
+                y = f.(x)
+                do_thunk(y, binds)
+            end
+
+          {:forced, ^ref_x, x} ->
+            receive do
+              {:forced, ^ref_f, f} ->
+                y = f.(x)
+                do_thunk(y, binds)
+            end
+        end
+    end
+  end
+
+  defp do_thunk(_, []), do: exit(:normal)
+
+  defp do_thunk(x, [{:bind, ref, pid} | binds]) do
+    send(pid, {:forced, ref, x})
+    do_thunk(x, binds)
   end
 
   @doc """
@@ -113,8 +125,21 @@ defmodule Thunk do
   """
   @spec suspend(any) :: thunk
   defmacro suspend(x) do
+    do_suspend(x)
+  end
+
+  defp do_suspend(do: block) do
     quote do
-      pid = spawn(Thunk, :thunk, [{:const, fn -> unquote(x) end}])
+      fun = fn -> unquote(block) end
+      pid = spawn(Thunk, :thunk, [{:var, fun}, []])
+      %Thunk{pid: pid}
+    end
+  end
+
+  defp do_suspend(value) do
+    quote do
+      fun = fn -> unquote(value) end
+      pid = spawn(Thunk, :thunk, [{:var, fun}, []])
       %Thunk{pid: pid}
     end
   end
@@ -130,28 +155,11 @@ defmodule Thunk do
   """
   @spec force(thunk) :: any
   def force(thunk) do
-    ref = Process.monitor(thunk.pid)
-    send(thunk.pid, :eval)
+    ref = bind_to(thunk.pid)
+    send(thunk.pid, :force)
 
     receive do
-      # If evaluated return x.
-      {:DOWN, ^ref, :process, _, {:evaluated, x}} ->
-        x
-
-      # If process doesn't exist raises
-      # a ThunkError.
-      {:DOWN, ^ref, :process, _, :noproc} ->
-        raise(ThunkError, {:noproc, thunk.pid})
-
-      # If receives an error, reraise it.
-      {:DOWN, ^ref, :process, _, {msg, stacktrace}} ->
-        if Exception.exception?(msg) do
-          reraise(msg, stacktrace)
-        end
-
-      # If process was killed raise ThunkError.
-      {:DOWN, ^ref, :process, _, :killed} ->
-        raise(ThunkError, {:killed, thunk.pid})
+      {:forced, ^ref, x} -> x
     end
   end
 
@@ -176,20 +184,64 @@ defmodule Thunk do
   def map(thunk, f) do
     me = self()
 
-    # Spawns a process that monitors argument
-    # thunk, sends calling process :ok, and then 
-    # behaves as thunk with lambda clause.
     pid =
       spawn(fn ->
-        ref = Process.monitor(thunk.pid)
+        ref = bind_to(thunk.pid)
         send(me, :ok)
-        thunk({:lambda, thunk.pid, ref, f})
+        thunk({:lambda, ref, thunk.pid, f}, [])
       end)
 
     receive do
-      :ok ->
-        %__MODULE__{pid: pid}
+      :ok -> %__MODULE__{pid: pid}
     end
+  end
+
+  @doc """
+  Given a thunk with a function and a thunk
+  with it's argument, returns a thunk with the result
+  of their application.
+
+  ## Example
+
+      iex> defmodule ThunkyMath do
+      ...>   require Thunk   
+      ...>
+      ...>   # Add two thunks
+      ...>   def add(x, y) do
+      ...>    addr = fn n1 -> fn n2 -> n1 + n2 end end
+      ...>     Thunk.map(x, addr)
+      ...>     |> Thunk.apply(y)
+      ...>   end
+      ...> end
+      iex> x = Thunk.suspend(12)
+      iex> y = Thunk.suspend(13)
+      iex> z = ThunkyMath.add(x, y)
+      #Thunk<...>
+      iex> Thunk.force(z)
+      25
+  """
+  @spec apply(thunk, thunk) :: thunk
+  def apply(thunk_f, thunk_x) do
+    me = self()
+
+    pid =
+      spawn(fn ->
+        ref_f = bind_to(thunk_f.pid)
+        ref_x = bind_to(thunk_x.pid)
+        send(me, :ok)
+        thunk({:apply, ref_f, thunk_f.pid, ref_x, thunk_x.pid}, [])
+      end)
+
+    receive do
+      :ok -> %__MODULE__{pid: pid}
+    end
+  end
+
+  defp bind_to(pid) do
+    Process.link(pid)
+    ref = make_ref()
+    send(pid, {:bind, ref, self()})
+    ref
   end
 
   @doc """
@@ -204,7 +256,6 @@ defmodule Thunk do
 
   ## Example 
 
-      iex> require Thunk
       iex> thunk = Thunk.suspend(:some_computation)
       iex> Thunk.delete(thunk)
       iex> Thunk.exists?(thunk)
@@ -233,18 +284,6 @@ defmodule Thunk do
   """
   @spec copy(thunk) :: thunk
   def copy(thunk), do: map(thunk, fn x -> x end)
-end
-
-defmodule ThunkError do
-  defexception [:message]
-
-  def exception({:killed, pid}) do
-    %__MODULE__{message: "Thunk, #{inspect(pid)}, was deleted"}
-  end
-
-  def exception({:noproc, pid}) do
-    %__MODULE__{message: "Thunk, #{inspect(pid)}, already evaluated or was deleted."}
-  end
 end
 
 defimpl Inspect, for: Thunk do
