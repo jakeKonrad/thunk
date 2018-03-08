@@ -10,8 +10,9 @@ defmodule ThunkTest do
     v = suspend(:test)
     lhs = map(v, id)
     rhs = id.(v)
-    rhs = force(rhs) # Have to force rhs first otherwise the lhs 
-                     # will force the rhs before it is used.
+    # Have to force rhs first otherwise the lhs 
+    rhs = force(rhs)
+    # will force the rhs before it is used.
     assert force(lhs) == rhs
   end
 
@@ -26,9 +27,11 @@ defmodule ThunkTest do
 
   test "First Applicative Law / Identity" do
     v = suspend(:test)
+
     lhs =
       suspend(fn x -> x end)
       |> apply(v)
+
     rhs = force(v)
     assert force(lhs) == rhs
   end
@@ -36,22 +39,24 @@ defmodule ThunkTest do
   test "Second Applicative Law / Homomorphism" do
     x = :test
     f = &Atom.to_string/1
+
     lhs =
       suspend(f)
       |> apply(suspend(x))
-    rhs =
-      suspend(f.(x))
+
+    rhs = suspend(f.(x))
     assert force(lhs) == force(rhs)
   end
 
   test "Third Applicative Law / Interchange" do
-    y = :test 
+    y = :test
     u = suspend(&Atom.to_string/1)
-    lhs =
-      apply(u, suspend(y))
+    lhs = apply(u, suspend(y))
+
     rhs =
       suspend(fn f -> f.(y) end)
       |> apply(u)
+
     assert force(lhs) == force(rhs)
   end
 
@@ -59,13 +64,14 @@ defmodule ThunkTest do
     u = suspend(&String.to_atom/1)
     v = suspend(&Atom.to_string/1)
     w = suspend(:test)
-    lhs = 
+
+    lhs =
       suspend(fn g -> fn f -> fn x -> g.(f.(x)) end end end)
       |> apply(u)
       |> apply(v)
       |> apply(w)
-    rhs = 
-      apply(u, apply(v, w))
+
+    rhs = apply(u, apply(v, w))
     assert force(lhs) == force(rhs)
   end
 end
