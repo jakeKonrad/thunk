@@ -11,7 +11,7 @@ by adding `thunk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:thunk, "~> 0.3.0"}
+    {:thunk, "~> 0.3.1"}
   ]
 end
 ```

@@ -1,11 +1,11 @@
 defmodule Thunk do
   @moduledoc """
-  Laziness in Elixir. `Thunk`s are computations that have not yet happened.
-  This module provides the `thunk` type and functions for manipulating and
+  Laziness in Elixir. Thunks are computations that have not yet happened.
+  This module provides the thunk type and functions for manipulating and
   creating thunks.
 
-  `Thunk`s allow for setting up a computation and transforming it without evaluating it.
-  A `thunk` can be used by other thunks and evaluation is shared.
+  Thunks allow for setting up a computation and transforming it without evaluating it.
+  A thunk can be used by other thunks and evaluation is shared.
 
   ## Example
 
@@ -35,7 +35,7 @@ defmodule Thunk do
   @typedoc """
   Thunk type.
   """
-  @opaque thunk :: %__MODULE__{pid: pid}
+  @opaque t :: %__MODULE__{pid: pid}
 
   @typedoc """
   Alias for any.
@@ -116,14 +116,21 @@ defmodule Thunk do
   end
 
   @doc """
-  Suspends a value in a `thunk`. Doesn't evaluate it's argument.
+  Suspends a value in a thunk. Doesn't evaluate it's argument. Can be used
+  as a do block as well.
 
   ## Example
 
       iex> Thunk.suspend(raise("Oops you evaluated me!"))
       #Thunk<...>
+      iex> Thunk.suspend do
+      ...>   x = 5
+      ...>   y = 6
+      ...>   x + y
+      ...> end
+      #Thunk<...>
   """
-  @spec suspend(any) :: thunk
+  @spec suspend(any) :: t
   defmacro suspend(x) do
     do_suspend(x)
   end
@@ -145,7 +152,7 @@ defmodule Thunk do
   end
 
   @doc """
-  Evaluates a `thunk`. Raises a `ThunkError` if already evaluated.
+  Forces a thunk. Raises a ThunkError if already forced or deleted.
 
   ## Example 
 
@@ -153,7 +160,7 @@ defmodule Thunk do
       iex> Thunk.force(thunk)
       :value
   """
-  @spec force(thunk) :: any
+  @spec force(t) :: any
   def force(thunk) do
     ref = bind_to(thunk.pid)
     send(thunk.pid, :force)
@@ -171,7 +178,7 @@ defmodule Thunk do
   def thunk?(_), do: false
 
   @doc """
-  Applies a function to a `thunk`.
+  Applies a function to a thunk.
 
   ## Example
 
@@ -180,7 +187,7 @@ defmodule Thunk do
       iex> Thunk.force(thunk_y)
       2
   """
-  @spec map(thunk, (element -> any)) :: thunk
+  @spec map(t, (element -> any)) :: t
   def map(thunk, f) do
     me = self()
 
@@ -199,7 +206,7 @@ defmodule Thunk do
   @doc """
   Given a thunk with a function and a thunk
   with it's argument, returns a thunk with the result
-  of their application.
+  of their application. 
 
   ## Example
 
@@ -220,7 +227,7 @@ defmodule Thunk do
       iex> Thunk.force(z)
       25
   """
-  @spec apply(thunk, thunk) :: thunk
+  @spec apply(t, t) :: t
   def apply(thunk_f, thunk_x) do
     me = self()
 
@@ -238,16 +245,24 @@ defmodule Thunk do
   end
 
   defp bind_to(pid) do
-    Process.link(pid)
-    ref = make_ref()
-    send(pid, {:bind, ref, self()})
-    ref
+    try do
+      Process.link(pid)
+      ref = make_ref()
+      send(pid, {:bind, ref, self()})
+      ref
+    rescue
+      ErlangError ->
+        raise(
+          ThunkError,
+          message: "thunk has already been forced or deleted"
+        )
+    end
   end
 
   @doc """
   Is thunk still around?
   """
-  @spec exists?(thunk) :: boolean
+  @spec exists?(t) :: boolean
   def exists?(thunk), do: Process.alive?(thunk.pid)
 
   @doc """
@@ -261,16 +276,16 @@ defmodule Thunk do
       iex> Thunk.exists?(thunk)
       false
   """
-  @spec delete(thunk) :: :ok
+  @spec delete(t) :: true
   def delete(thunk) do
     Process.exit(thunk.pid, :kill)
-    :ok
+    true
   end
 
   @doc """
-  Copies a thunk. When a thunk is evaluated it ceases to exist,
+  Copies a thunk. When a thunk is forced it ceases to exist,
   so this function is useful for holding onto a result should it
-  be evaluated.
+  be forced.
 
   ## Example
 
@@ -282,8 +297,12 @@ defmodule Thunk do
       iex> Thunk.force(thunk_copy)
       :some_computation
   """
-  @spec copy(thunk) :: thunk
+  @spec copy(t) :: t
   def copy(thunk), do: map(thunk, fn x -> x end)
+end
+
+defmodule ThunkError do
+  defexception [:message]
 end
 
 defimpl Inspect, for: Thunk do
